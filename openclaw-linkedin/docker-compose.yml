@@ -1,27 +1,7 @@
-version: '3.8'
-
 services:
-  openclaw-gateway:
-    image: ghcr.io/openclaw/openclaw-gateway:latest # Imagem base teórica do servidor OpenClaw
-    ports:
-      - "8000:8000"
-    environment:
-      - OPENAI_API_KEY=${LLM_API_KEY} # Substitua pela sua API Key (OpenAI, Gemini, etc. de acordo com config)
-      - AGENT_NAME=LinkedIn_Engager
-    volumes:
-      - ./data:/app/data
-      - ./instructions.md:/app/system_prompt.md:ro
-    restart: unless-stopped
-
-  openclaw-runtime:
-    image: ghcr.io/openclaw/openclaw-runtime:latest # Cérebro e runtime do agente com Browser Utilities
-    depends_on:
-      - openclaw-gateway
-    environment:
-      - GATEWAY_URL=http://openclaw-gateway:8000
-      - BROWSER_USE_ENABLED=true
-      - LINKEDIN_COOKIE_LI_AT=${LINKEDIN_LI_AT} # Necessário para o bot não parar no login
-    volumes:
-      - ./data:/app/data
-    shm_size: '2gb' # Necessário para rodar navegadores (Playwright) internamente
-    restart: unless-stopped
+  openclaw-agent:
+    build: .
+    env_file:
+      - .env
+    shm_size: '2gb'
+    restart: "no"
