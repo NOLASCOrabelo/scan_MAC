@@ -5,3 +5,5 @@ services:
       - .env
     shm_size: '2gb'
     restart: "no"
+    volumes:
+      - .:/app

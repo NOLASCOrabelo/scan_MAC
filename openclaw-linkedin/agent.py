@@ -49,7 +49,19 @@ def extrair_posts(page) -> list[dict]:
         'div[data-id^="urn:li:activity:"]',
         '.feed-shared-update-v2',
         '.occludable-update',
+        '[data-view-name="feed-full-update"]',
+        '.scaffold-finite-scroll__content > div > div',
     ]
+
+    # Aguarda até algum seletor aparecer (até 15s)
+    print("  Aguardando posts carregarem...")
+    for selector in container_selectors:
+        try:
+            page.wait_for_selector(selector, timeout=15000)
+            print(f"  Seletor funcionando: {selector}")
+            break
+        except Exception:
+            continue
 
     post_elements = []
     for selector in container_selectors:
@@ -60,7 +72,11 @@ def extrair_posts(page) -> list[dict]:
             break
 
     if not post_elements:
-        print("  Nenhum seletor encontrou posts. Verifique o cookie li_at.")
+        # Debug: salvar HTML para análise
+        print("  Nenhum seletor encontrou posts. Salvando HTML para debug...")
+        with open("feed_live_debug.html", "w", encoding="utf-8") as f:
+            f.write(page.content())
+        print("  HTML salvo em feed_live_debug.html")
         return posts
 
     text_selectors = [
@@ -194,8 +210,8 @@ def main():
 
         print("[2/4] Acessando feed do LinkedIn...")
         page.goto("https://www.linkedin.com/feed/")
-        page.wait_for_load_state("domcontentloaded")
-        time.sleep(5)
+        page.wait_for_load_state("networkidle", timeout=30000)
+        time.sleep(8)
 
         # Verificar se está logado
         if "login" in page.url or "authwall" in page.url:
