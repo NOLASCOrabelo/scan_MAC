@@ -182,11 +182,24 @@ def main():
     print("  OpenClaw LinkedIn Agent")
     print("=" * 50)
 
-    if not LINKEDIN_LI_AT:
-        print("[ERRO] LINKEDIN_LI_AT não definido no .env")
-        return
     if not LLM_API_KEY:
         print("[ERRO] LLM_API_KEY não definido no .env")
+        return
+
+    # Tentar renovar cookie automaticamente se credenciais estiverem configuradas
+    email = os.getenv("LINKEDIN_EMAIL", "")
+    if email and email != "seu_email@exemplo.com":
+        print("\n[Cookie] Renovando li_at automaticamente...")
+        try:
+            from refresh_cookie import refresh
+            refresh()
+            load_dotenv(override=True)
+        except Exception as e:
+            print(f"[Cookie] Não foi possível renovar automaticamente: {e}")
+
+    li_at = os.getenv("LINKEDIN_LI_AT")
+    if not li_at:
+        print("[ERRO] LINKEDIN_LI_AT não definido no .env")
         return
 
     with sync_playwright() as p:
@@ -201,7 +214,7 @@ def main():
         )
         context.add_cookies([{
             "name": "li_at",
-            "value": LINKEDIN_LI_AT,
+            "value": li_at,
             "domain": ".www.linkedin.com",
             "path": "/",
         }])
