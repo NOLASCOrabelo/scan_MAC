@@ -78,10 +78,10 @@ def run_analysis():
         print("\n[1/4] Acessando feed...")
         page.goto("https://www.linkedin.com/feed/")
         try:
-            page.wait_for_load_state("networkidle", timeout=20000)
+            page.wait_for_load_state("domcontentloaded")
         except Exception:
             pass
-        time.sleep(8)
+        time.sleep(10)
 
         current_url = page.url
         print(f"      URL: {current_url}")

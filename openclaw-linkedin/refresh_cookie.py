@@ -49,19 +49,22 @@ def refresh():
 
         page.goto("https://www.linkedin.com/login")
         page.wait_for_load_state("domcontentloaded")
-        time.sleep(2)
+        time.sleep(3)
 
-        # Preencher email
-        page.fill("#username", EMAIL)
+        # Preencher email — tenta múltiplos seletores
+        email_sel = 'input[name="session_key"], #username, input[type="email"], input[autocomplete="username"]'
+        page.wait_for_selector(email_sel, timeout=15000)
+        page.fill(email_sel, EMAIL)
         time.sleep(0.5)
 
         # Preencher senha
-        page.fill("#password", PASSWORD)
+        pass_sel = 'input[name="session_password"], #password, input[type="password"]'
+        page.fill(pass_sel, PASSWORD)
         time.sleep(0.5)
 
         # Clicar em entrar
-        page.click('button[type="submit"]')
-        time.sleep(5)
+        page.click('button[type="submit"], button[data-litms-control-urn="login-submit"]')
+        time.sleep(6)
 
         current_url = page.url
         print(f"URL após login: {current_url}")
