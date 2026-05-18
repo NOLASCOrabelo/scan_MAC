@@ -1,5 +1,8 @@
 import os
+import sys
 import time
+
+sys.stdout.reconfigure(encoding='utf-8')
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
@@ -171,49 +174,48 @@ JS_INTERACT = """
 
 
 def curtir_post(page, post_index: int, autor: str):
-    """Reage a um post usando Playwright locator (clique real, não JS)."""
+    """Reage a um post usando JS para contornar o Shadow DOM do LinkedIn."""
     try:
-        # Buscar o container do post via JS
-        container_info = page.evaluate(f"""
+        result = page.evaluate(f"""
         () => {{
+            function queryAllShadow(root, selector) {{
+                const found = [];
+                try {{ found.push(...root.querySelectorAll(selector)); }} catch(e) {{}}
+                for (const el of root.querySelectorAll('*')) {{
+                    if (el.shadowRoot) found.push(...queryAllShadow(el.shadowRoot, selector));
+                }}
+                return found;
+            }}
             const mainFeed = document.querySelector('[data-testid="mainFeed"]');
             const searchRoot = mainFeed || document;
             let containers = Array.from(searchRoot.querySelectorAll('[role="listitem"]'));
             if (!containers.length) containers = Array.from(searchRoot.querySelectorAll('[data-display-contents="true"]'));
             if (!containers.length && mainFeed) containers = Array.from(mainFeed.children);
+            if (!containers.length) containers = queryAllShadow(document, '[role="listitem"]');
+            
             const valid = containers.filter(c => (c.innerText||'').trim().length > 30);
             const container = valid[{post_index}];
             if (!container) return {{ error: 'container not found' }};
             
-            // Marcar o container com um ID único para o Playwright encontrar
-            container.setAttribute('data-kiro-post-index', '{post_index}');
-            return {{ success: true }};
+            const buttons = queryAllShadow(container, 'button');
+            const reactionKeywords = ['like', 'curtir', 'gostei', 'celebrate', 'support', 'love', 'insightful', 'funny'];
+            
+            for (const b of buttons) {{
+                const label = (b.getAttribute('aria-label') || b.innerText || '').toLowerCase();
+                for (const kw of reactionKeywords) {{
+                    if (label.includes(kw) && !label.includes('desfazer') && !label.includes('undo')) {{
+                        b.click();
+                        return {{ success: true, keyword: kw }};
+                    }}
+                }}
+            }}
+            return {{ error: 'no reaction button found' }};
         }}
         """)
         
-        if container_info.get("error"):
-            print(f"  ⚠️  {container_info['error']}")
-            return
-
-        # Usar Playwright locator para clicar de verdade
-        container = page.locator(f'[data-kiro-post-index="{post_index}"]')
-        
-        # Tentar encontrar botão de reação por aria-label
-        reaction_keywords = ['like', 'curtir', 'gostei', 'celebrate', 'support', 'love', 'insightful', 'funny']
-        clicked = False
-        
-        for keyword in reaction_keywords:
-            try:
-                btn = container.locator(f'button[aria-label*="{keyword}" i]').first
-                if btn.count() > 0:
-                    btn.click(timeout=3000)
-                    clicked = True
-                    print(f"  👍 Reagido ({keyword}): {autor[:40]}")
-                    break
-            except Exception:
-                continue
-        
-        if not clicked:
+        if result and result.get("success"):
+            print(f"  👍 Reagido ({result.get('keyword')}): {autor[:40]}")
+        else:
             print(f"  ⚠️  Nenhum botão de reação encontrado para: {autor[:40]}")
             
     except Exception as e:
@@ -221,40 +223,74 @@ def curtir_post(page, post_index: int, autor: str):
 
 
 def comentar_post(page, post_index: int, autor: str, comentario: str):
-    """Comenta em um post usando Playwright locator (clique real)."""
+    """Comenta em um post usando JS para contornar o Shadow DOM do LinkedIn."""
     try:
-        # Marcar container
-        page.evaluate(f"""
+        result = page.evaluate(f"""
         () => {{
+            function queryAllShadow(root, selector) {{
+                const found = [];
+                try {{ found.push(...root.querySelectorAll(selector)); }} catch(e) {{}}
+                for (const el of root.querySelectorAll('*')) {{
+                    if (el.shadowRoot) found.push(...queryAllShadow(el.shadowRoot, selector));
+                }}
+                return found;
+            }}
             const mainFeed = document.querySelector('[data-testid="mainFeed"]');
             const searchRoot = mainFeed || document;
             let containers = Array.from(searchRoot.querySelectorAll('[role="listitem"]'));
             if (!containers.length) containers = Array.from(searchRoot.querySelectorAll('[data-display-contents="true"]'));
             if (!containers.length && mainFeed) containers = Array.from(mainFeed.children);
+            if (!containers.length) containers = queryAllShadow(document, '[role="listitem"]');
+            
             const valid = containers.filter(c => (c.innerText||'').trim().length > 30);
             const container = valid[{post_index}];
-            if (container) container.setAttribute('data-kiro-comment-index', '{post_index}');
+            if (!container) return {{ error: 'container not found' }};
+            
+            const buttons = queryAllShadow(container, 'button');
+            for (const b of buttons) {{
+                const label = (b.getAttribute('aria-label') || b.innerText || '').toLowerCase();
+                if (label.includes('comment') || label.includes('comentar') || label.includes('comentário')) {{
+                    b.click();
+                    return {{ success: true }};
+                }}
+            }}
+            return {{ error: 'no comment button found' }};
         }}
         """)
         
-        container = page.locator(f'[data-kiro-comment-index="{post_index}"]')
-        
-        # Clicar no botão de comentário
-        comment_btn = container.locator('button[aria-label*="comment" i], button[aria-label*="comentar" i]').first
-        if comment_btn.count() == 0:
+        if not result or not result.get("success"):
             print(f"  ⚠️  Botão de comentário não encontrado para: {autor[:40]}")
             return
             
-        comment_btn.click(timeout=5000)
         time.sleep(3)
 
-        # Digitar no campo de comentário
-        comment_box = page.locator('[contenteditable="true"][role="textbox"]').last
-        if comment_box.count() > 0:
-            comment_box.click()
-            comment_box.fill(comentario)
+        # Encontrar campo de texto e focar
+        fill_result = page.evaluate("""
+        () => {
+            function queryAllShadow(root, selector) {
+                const found = [];
+                try { found.push(...root.querySelectorAll(selector)); } catch(e) {}
+                for (const el of root.querySelectorAll('*')) {
+                    if (el.shadowRoot) found.push(...queryAllShadow(el.shadowRoot, selector));
+                }
+                return found;
+            }
+            const boxes = queryAllShadow(document, '[contenteditable="true"][role="textbox"]');
+            if (boxes.length > 0) {
+                const box = boxes[boxes.length - 1]; // Pegar a última (a do post atual que foi aberta)
+                box.focus();
+                return { success: true };
+            }
+            return { error: 'box not found' };
+        }
+        """)
+
+        if fill_result and fill_result.get("success"):
             time.sleep(1)
-            comment_box.press("Control+Enter")
+            # Digitar simulando teclado e enviar
+            page.keyboard.insert_text(comentario)
+            time.sleep(1)
+            page.keyboard.press("Control+Enter")
             time.sleep(2)
             print(f"  💬 Comentado em: {autor[:40]}")
             print(f"     → {comentario[:100]}")
