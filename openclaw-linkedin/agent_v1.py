@@ -356,10 +356,6 @@ def comentar_post(page, post_index: int, autor: str, comentario: str):
         print(f"  Erro ao comentar: {e}")
 
 
-TOTAL_LOOPS = 3
-INTERVALO_MINUTOS = 30
-
-
 def main():
     print("=" * 50)
     print("  OpenClaw LinkedIn Agent")
@@ -369,36 +365,6 @@ def main():
         print("[ERRO] LLM_API_KEY não definido no .env")
         return
 
-    for loop in range(1, TOTAL_LOOPS + 1):
-        print(f"\n{'=' * 50}")
-        print(f"  CICLO {loop} de {TOTAL_LOOPS}")
-        print(f"{'=' * 50}")
-        executar_ciclo()
-        if loop < TOTAL_LOOPS:
-            print(f"\n⏳ Aguardando {INTERVALO_MINUTOS} minutos para o próximo ciclo...")
-            for minuto in range(INTERVALO_MINUTOS, 0, -1):
-                print(f"   {minuto} minuto(s) restante(s)...", end="\r")
-                time.sleep(60)
-            print()
-
-    print("\n" + "=" * 50)
-    print(f"  Todos os {TOTAL_LOOPS} ciclos concluídos. Encerrando.")
-    print("=" * 50)
-
-    # Limpeza de screenshots
-    try:
-        import glob
-        apagadas = 0
-        for f in glob.glob("screenshot_*.png"):
-            os.remove(f)
-            apagadas += 1
-        if apagadas:
-            print(f"  🧹 {apagadas} screenshot(s) apagada(s).")
-    except Exception as e:
-        print(f"  Erro ao apagar screenshots: {e}")
-
-
-def executar_ciclo():
     # Tentar renovar cookie automaticamente se credenciais estiverem configuradas
     email = os.getenv("LINKEDIN_EMAIL", "")
     if email and email != "seu_email@exemplo.com":
@@ -496,8 +462,23 @@ def executar_ciclo():
 
             time.sleep(2)
 
-        print(f"\n  Ciclo concluído: {curtidos} reações | {comentados} comentários")
+        print("\n" + "=" * 50)
+        print(f"  Concluído: {curtidos} curtidas | {comentados} comentários")
+        print("=" * 50)
+
         browser.close()
+
+    print("\n[Limpeza] Aguardando 1 minuto para apagar as screenshots geradas...")
+    time.sleep(60)
+    try:
+        import glob
+        apagadas = 0
+        for f in glob.glob("screenshot_*.png"):
+            os.remove(f)
+            apagadas += 1
+        print(f"  {apagadas} screenshots apagadas com sucesso.")
+    except Exception as e:
+        print(f"  Erro ao apagar screenshots: {e}")
 
 
 if __name__ == "__main__":

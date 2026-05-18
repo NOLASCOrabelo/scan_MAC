@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>OpenClaw — LinkedIn Agent</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+
+    header {
+      background: linear-gradient(135deg, #0077b5, #00a0dc);
+      padding: 20px 32px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      box-shadow: 0 2px 12px rgba(0,119,181,0.4);
+    }
+    header h1 { font-size: 1.5rem; font-weight: 700; color: #fff; }
+    header span { font-size: 0.85rem; color: rgba(255,255,255,0.75); }
+    .badge {
+      margin-left: auto;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+    }
+    .badge.running { background: #22c55e; color: #fff; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 28px 20px; display: grid; grid-template-columns: 340px 1fr; gap: 20px; }
+
+    .card {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 12px;
+      padding: 22px;
+    }
+    .card h2 { font-size: 0.95rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 18px; }
+
+    .form-group { margin-bottom: 14px; }
+    label { display: block; font-size: 0.82rem; color: #94a3b8; margin-bottom: 5px; }
+    input, select {
+      width: 100%; padding: 9px 12px;
+      background: #0f1117; border: 1px solid #2d3148;
+      border-radius: 8px; color: #e2e8f0; font-size: 0.88rem;
+      outline: none; transition: border 0.2s;
+    }
+    input:focus, select:focus { border-color: #0077b5; }
+    input[type="password"] { letter-spacing: 2px; }
+
+    .btn {
+      width: 100%; padding: 11px;
+      border: none; border-radius: 8px;
+      font-size: 0.9rem; font-weight: 600;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .btn-primary { background: #0077b5; color: #fff; }
+    .btn-primary:hover { background: #005f8e; }
+    .btn-danger { background: #ef4444; color: #fff; margin-top: 8px; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-secondary { background: #2d3148; color: #e2e8f0; margin-top: 8px; }
+    .btn-secondary:hover { background: #3d4168; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+    .stat-box {
+      background: #0f1117; border: 1px solid #2d3148;
+      border-radius: 8px; padding: 14px; text-align: center;
+    }
+    .stat-box .value { font-size: 1.8rem; font-weight: 700; color: #0077b5; }
+    .stat-box .label { font-size: 0.75rem; color: #64748b; margin-top: 2px; }
+
+    .progress-bar {
+      background: #2d3148; border-radius: 20px; height: 8px; margin-bottom: 6px; overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; background: linear-gradient(90deg, #0077b5, #00a0dc);
+      border-radius: 20px; transition: width 0.5s;
+    }
+    .progress-label { font-size: 0.8rem; color: #64748b; text-align: right; }
+
+    .log-box {
+      background: #0a0c12; border: 1px solid #1e2235;
+      border-radius: 8px; height: 320px; overflow-y: auto;
+      padding: 12px; font-family: 'Courier New', monospace; font-size: 0.78rem;
+    }
+    .log-entry { padding: 2px 0; border-bottom: 1px solid #1a1d27; }
+    .log-entry .time { color: #475569; margin-right: 8px; }
+    .log-entry.info .msg { color: #94a3b8; }
+    .log-entry.success .msg { color: #22c55e; }
+    .log-entry.warning .msg { color: #f59e0b; }
+    .log-entry.error .msg { color: #ef4444; }
+
+    .status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; font-size: 0.85rem; color: #64748b; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #475569; }
+    .dot.active { background: #22c55e; animation: pulse 1.5s infinite; }
+
+    .divider { border: none; border-top: 1px solid #2d3148; margin: 16px 0; }
+
+    .right-col { display: flex; flex-direction: column; gap: 20px; }
+
+    .toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: #22c55e; color: #fff;
+      padding: 12px 20px; border-radius: 8px;
+      font-size: 0.85rem; font-weight: 600;
+      opacity: 0; transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; }
+    .toast.error { background: #ef4444; }
+  </style>
+</head>
+<body>
+
+<header>
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="white"><path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z"/><circle cx="4" cy="4" r="2" fill="white"/></svg>
+  <div>
+    <h1>OpenClaw LinkedIn Agent</h1>
+    <span>Engagement automatizado com IA</span>
+  </div>
+  <div class="badge" id="statusBadge">Parado</div>
+</header>
+
+<div class="container">
+  <!-- Coluna esquerda: configurações -->
+  <div>
+    <div class="card" style="margin-bottom:20px">
+      <h2>⚙️ Configurações do Agente</h2>
+      <div class="form-group">
+        <label>Número de ciclos</label>
+        <select id="loops">
+          <option value="1">1 ciclo</option>
+          <option value="2">2 ciclos</option>
+          <option value="3" selected>3 ciclos</option>
+          <option value="5">5 ciclos</option>
+          <option value="10">10 ciclos</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Intervalo entre ciclos</label>
+        <select id="interval">
+          <option value="1">1 minuto (teste)</option>
+          <option value="15">15 minutos</option>
+          <option value="30" selected>30 minutos</option>
+          <option value="60">1 hora</option>
+          <option value="120">2 horas</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" id="btnStart" onclick="startAgent()">▶ Iniciar Agente</button>
+      <button class="btn btn-danger" id="btnStop" onclick="stopAgent()" disabled>⏹ Parar Agente</button>
+    </div>
+
+    <div class="card">
+      <h2>🔑 Credenciais</h2>
+      <div style="background:#0f2a1a;border:1px solid #166534;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:0.78rem;color:#4ade80;line-height:1.5;">
+        🔒 <strong>Zero-knowledge:</strong> suas credenciais ficam <strong>apenas na memória RAM</strong> durante a sessão. Nunca são gravadas em disco, banco de dados ou logs. Ao parar o agente, são apagadas automaticamente.
+      </div>
+      <div class="form-group">
+        <label>Email LinkedIn <span id="emailStatus" style="color:#22c55e;font-size:0.75rem;"></span></label>
+        <input type="email" id="email" placeholder="seu@email.com" />
+      </div>
+      <div class="form-group">
+        <label>Senha LinkedIn <span id="passwordStatus" style="color:#22c55e;font-size:0.75rem;"></span></label>
+        <input type="password" id="password" placeholder="••••••••" />
+      </div>
+      <div class="form-group">
+        <label>Gemini API Key <span id="llmStatus" style="color:#22c55e;font-size:0.75rem;"></span></label>
+        <input type="password" id="llmKey" placeholder="AIza..." />
+      </div>
+      <button class="btn btn-secondary" onclick="saveConfig()">� Enviar para Memória</button>
+      <button class="btn" style="background:#7f1d1d;color:#fca5a5;margin-top:8px;" onclick="clearCredentials()">🗑️ Apagar da Memória</button>
+    </div>
+  </div>
+
+  <!-- Coluna direita: status + logs -->
+  <div class="right-col">
+    <div class="card">
+      <h2>📊 Estatísticas</h2>
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="value" id="statReactions">0</div>
+          <div class="label">Reações</div>
+        </div>
+        <div class="stat-box">
+          <div class="value" id="statComments">0</div>
+          <div class="label">Comentários</div>
+        </div>
+        <div class="stat-box">
+          <div class="value" id="statPosts">0</div>
+          <div class="label">Posts</div>
+        </div>
+      </div>
+
+      <div class="status-row">
+        <div class="dot" id="statusDot"></div>
+        <span id="statusText">Aguardando início</span>
+      </div>
+
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width:0%"></div>
+      </div>
+      <div class="progress-label" id="progressLabel">Ciclo 0 / 0</div>
+
+      <hr class="divider">
+      <div style="font-size:0.8rem; color:#64748b; display:flex; gap:20px;">
+        <span>Iniciado: <strong id="startedAt">—</strong></span>
+        <span>Próximo ciclo: <strong id="nextCycle">—</strong></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📋 Logs em tempo real</h2>
+      <div class="log-box" id="logBox"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  let polling = null;
+
+  function showToast(msg, isError = false) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast show' + (isError ? ' error' : '');
+    setTimeout(() => t.className = 'toast', 2500);
+  }
+
+  async function startAgent() {
+    const loops = document.getElementById('loops').value;
+    const interval = document.getElementById('interval').value;
+    const res = await fetch('/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ loops: parseInt(loops), interval: parseInt(interval) })
+    });
+    const data = await res.json();
+    if (data.error) { showToast(data.error, true); return; }
+    showToast('Agente iniciado!');
+    startPolling();
+  }
+
+  async function stopAgent() {
+    await fetch('/stop', { method: 'POST' });
+    showToast('Parando agente...', false);
+  }
+
+  async function saveConfig() {
+    const body = {
+      email: document.getElementById('email').value,
+      password: document.getElementById('password').value,
+      llm_key: document.getElementById('llmKey').value,
+    };
+    await fetch('/save-config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    showToast('Credenciais salvas!');
+  }
+
+  function startPolling() {
+    if (polling) clearInterval(polling);
+    polling = setInterval(fetchStatus, 2000);
+  }
+
+  async function fetchStatus() {
+    const res = await fetch('/status');
+    const data = await res.json();
+
+    // Stats
+    document.getElementById('statReactions').textContent = data.stats.reactions;
+    document.getElementById('statComments').textContent = data.stats.comments;
+    document.getElementById('statPosts').textContent = data.stats.posts_processed;
+
+    // Status
+    const dot = document.getElementById('statusDot');
+    const badge = document.getElementById('statusBadge');
+    const statusText = document.getElementById('statusText');
+
+    if (data.running) {
+      dot.className = 'dot active';
+      badge.className = 'badge running';
+      badge.textContent = `Ciclo ${data.current_loop}/${data.total_loops}`;
+      statusText.textContent = data.next_cycle_at
+        ? `Aguardando próximo ciclo às ${data.next_cycle_at}`
+        : `Executando ciclo ${data.current_loop} de ${data.total_loops}`;
+      document.getElementById('btnStart').disabled = true;
+      document.getElementById('btnStop').disabled = false;
+    } else {
+      dot.className = 'dot';
+      badge.className = 'badge';
+      badge.textContent = 'Parado';
+      statusText.textContent = data.started_at ? 'Concluído' : 'Aguardando início';
+      document.getElementById('btnStart').disabled = false;
+      document.getElementById('btnStop').disabled = true;
+      if (polling) clearInterval(polling);
+    }
+
+    // Progress
+    const pct = data.total_loops > 0 ? (data.current_loop / data.total_loops * 100) : 0;
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressLabel').textContent = `Ciclo ${data.current_loop} / ${data.total_loops}`;
+
+    // Times
+    document.getElementById('startedAt').textContent = data.started_at || '—';
+    document.getElementById('nextCycle').textContent = data.next_cycle_at || '—';
+
+    // Logs
+    const logBox = document.getElementById('logBox');
+    logBox.innerHTML = data.logs.map(l =>
+      `<div class="log-entry ${l.level}"><span class="time">${l.time}</span><span class="msg">${l.message}</span></div>`
+    ).join('');
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+
+  // Carregar config inicial
+  async function loadConfig() {
+    const res = await fetch('/config');
+    const data = await res.json();
+    if (data.email) document.getElementById('email').value = data.email;
+  }
+
+  loadConfig();
+  fetchStatus();
+  startPolling();
+</script>
+</body>
+</html>
