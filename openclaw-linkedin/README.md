@@ -11,16 +11,20 @@ Este projeto é um agente automatizado especializado em engajamento no LinkedIn.
 ## Funcionalidades
 
 - **Interação Automatizada via Playwright**: Simulação de um navegador real para interagir de forma orgânica.
-- **Avaliação de Relevância**: O agente foca apenas em publicações relevantes para o seu nicho.
-- **Respostas Contextuais e Naturais**: Geração de respostas baseadas no contexto do post, mantendo um tom estritamente profissional e conciso.
+- **Simulação de Comportamento Humano (Random Timer)**: Uso de atrasos aleatórios configuráveis para rolagem, digitação caractere por caractere e esperas no feed, reduzindo detecção de automação.
+- **Geração de Comentários Multilíngue**: Suporte à geração de comentários autênticos em Português (pt-BR) e Inglês (en-US) com distribuição configurável.
+- **Interface Web de Monitoramento (FastAPI)**: Dashboard interativo para iniciar/parar o agente, gerenciar credenciais (incluindo o cookie `li_at`), definir intervalos de ciclo e visualizar logs em tempo real.
 - **Execução via Docker**: O ambiente é facilmente provisionado utilizando contêineres Docker, simplificando a instalação e gestão de dependências do Playwright.
 
 ## Estrutura do Projeto
 
 - `agent.py`: Script principal de execução do agente.
+- `server.py`: Servidor web FastAPI para gerenciar e monitorar o agente.
+- `random_timer.py`: Classe auxiliar para gerar intervalos e simular comportamento humano.
+- `templates/index.html`: Interface visual do painel do agente.
 - `Dockerfile` e `docker-compose.yml`: Arquivos para build e execução do ambiente isolado.
 - `instructions.md`: Arquivo com as instruções (prompt) que guiam o comportamento, tom e restrições do agente de IA.
-- `requirements.txt`: Dependências do projeto (Playwright, bibliotecas de IA, etc.).
+- `requirements.txt`: Dependências do projeto (Playwright, FastAPI, GenAI, etc.).
 
 ## Como Executar
 
@@ -34,7 +38,8 @@ Este projeto é um agente automatizado especializado em engajamento no LinkedIn.
    ```bash
    docker-compose up -d --build
    ```
-3. O agente será executado automaticamente. Você pode acompanhar os logs com:
+3. O painel web estará acessível na porta configurada (ex: `http://localhost:8000`), onde você poderá acompanhar o status, iniciar o agente e ver os logs em tempo real.
+4. Você também pode acompanhar os logs do terminal com:
    ```bash
    docker-compose logs -f
    ```
@@ -42,3 +47,4 @@ Este projeto é um agente automatizado especializado em engajamento no LinkedIn.
 ## Boas Práticas e Restrições
 
 Conforme definido em suas instruções centrais, o agente está proibido de se engajar com conteúdos ofensivos, políticos ou fora do domínio profissional estabelecido. Ocasionalmente, se o contexto for incerto, a instrução principal do agente o orienta a pular a postagem, mantendo a autenticidade e a segurança da conta.
+

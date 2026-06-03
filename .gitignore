@@ -1,0 +1,29 @@
+# Compiled Python files
+__pycache__/
+*.pyc
+
+# Environments & Secrets
+.env
+.env.*
+
+# Archives
+*.rar
+*.zip
+*.tar.gz
+
+# IDE and tool metadata
+.kiro/
+.vscode/
+
+# Local config & data
+timer_config.json
+data/
+
+# Screenshots, dumps, and temporary HTML files
+*.png
+*.jpg
+*.jpeg
+*.gif
+*debug.html
+*dump.html
+main_feed.html
