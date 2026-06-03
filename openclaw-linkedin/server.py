@@ -7,10 +7,12 @@ Acesse: http://localhost:8080
 import os
 import threading
 import time
+import random
 from datetime import datetime
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse
 import uvicorn
+from random_timer import RandomTimer, ActionType
 
 app = FastAPI()
 
@@ -29,7 +31,7 @@ state = {
     "running": False,
     "current_loop": 0,
     "total_loops": 3,
-    "interval_minutes": 30,
+    "interval_minutes": 120,
     "logs": [],
     "stats": {"reactions": 0, "comments": 0, "posts_processed": 0},
     "started_at": None,
@@ -47,6 +49,8 @@ def add_log(message: str, level: str = "info"):
     if len(state["logs"]) > 200:
         state["logs"] = state["logs"][-200:]
     print(f"[{entry['time']}] {message}")
+
+timer = RandomTimer(log_callback=add_log)
 
 
 def renovar_cookie() -> str | None:
@@ -69,14 +73,14 @@ def renovar_cookie() -> str | None:
             )
             page = context.new_page()
             page.goto("https://www.linkedin.com/login", wait_until="domcontentloaded")
-            time.sleep(3)
+            timer.sleep_random(ActionType.MEDIUM_WAIT)
 
             email_sel = 'input[name="session_key"], #username, input[type="email"]'
             page.wait_for_selector(email_sel, timeout=15000)
             page.fill(email_sel, email)
             page.fill('input[name="session_password"], #password, input[type="password"]', password)
             page.click('button[type="submit"]')
-            time.sleep(6)
+            timer.sleep_random(ActionType.LONG_WAIT)
 
             if "checkpoint" in page.url or "challenge" in page.url:
                 add_log("LinkedIn pediu verificação adicional (2FA/captcha).", "error")
@@ -107,6 +111,8 @@ def renovar_cookie() -> str | None:
 
 def run_agent():
     """Roda o agente em background. Credenciais usadas apenas da memória."""
+    import agent
+    agent.timer.log_callback = add_log
     from playwright.sync_api import sync_playwright
     from google import genai
     from google.genai import types
@@ -155,7 +161,7 @@ def run_agent():
 
                 add_log("Acessando feed do LinkedIn...", "info")
                 page.goto("https://www.linkedin.com/feed/", wait_until="domcontentloaded")
-                time.sleep(10)
+                timer.sleep_random(ActionType.FEED_LOADING)
 
                 if "login" in page.url or "authwall" in page.url:
                     add_log("Cookie inválido ou expirado.", "error")
@@ -164,7 +170,7 @@ def run_agent():
 
                 for _ in range(3):
                     page.keyboard.press("PageDown")
-                    time.sleep(2)
+                    timer.sleep_random(ActionType.SCROLL_DELAY)
 
                 from agent import JS_EXTRACT, curtir_post, comentar_post
                 dados = page.evaluate(JS_EXTRACT)
@@ -176,6 +182,11 @@ def run_agent():
                     add_log(f"{len(dados)} posts encontrados.", "info")
                     cycle_reactions = 0
                     cycle_comments = 0
+                    
+                    # Decide aleatoriamente qual idioma é a maioria no ciclo (2/3 de probabilidade)
+                    majority_lang = random.choice(["pt-BR", "en-US"])
+                    minority_lang = "en-US" if majority_lang == "pt-BR" else "pt-BR"
+                    add_log(f"Configuração de idiomas: Maioria {majority_lang} (66%), Minoria {minority_lang} (33%)", "info")
 
                     for idx, d in enumerate(dados):
                         if not state["running"]:
@@ -183,16 +194,25 @@ def run_agent():
 
                         autor = d.get("autor", "Desconhecido")[:50]
                         texto = d.get("texto", "")
-                        add_log(f"Processando: {autor}", "info")
+                        
+                        idioma_atual = majority_lang if random.random() < 2.0 / 3.0 else minority_lang
+                        add_log(f"Processando: {autor} | Idioma solicitado: {idioma_atual}", "info")
 
                         try:
+                            if idioma_atual == "pt-BR":
+                                lang_instruction = "write an authentic comment in Portuguese (Brazilian Portuguese) following your instructions."
+                                lang_reply = "Reply only with the comment in Portuguese or with IGNORE."
+                            else:
+                                lang_instruction = "write an authentic comment in English (US English) following your instructions."
+                                lang_reply = "Reply only with the comment in English or with IGNORE."
+
                             prompt = f"""Analyze the post below and decide if it's worth commenting on.
-If yes, write an authentic comment in ENGLISH following your instructions.
+If yes, {lang_instruction}
 If not worth commenting, reply exactly: IGNORE
 
 Post: {texto[:800]}
 
-Reply only with the comment in English or with IGNORE."""
+{lang_reply}"""
                             response = client.models.generate_content(
                                 model=MODEL,
                                 contents=prompt,
@@ -211,6 +231,7 @@ Reply only with the comment in English or with IGNORE."""
                         add_log(f"  👍 Reagido: {autor}", "success")
 
                         if comentario:
+                            timer.sleep_random(ActionType.REACTION_TO_COMMENT)
                             comentar_post(page, idx, autor, comentario)
                             cycle_comments += 1
                             state["stats"]["comments"] += 1
@@ -219,7 +240,7 @@ Reply only with the comment in English or with IGNORE."""
                             add_log(f"  ⏭️  Ignorado pelo Gemini", "info")
 
                         state["stats"]["posts_processed"] += 1
-                        time.sleep(2)
+                        timer.sleep_random(ActionType.POST_PROCESSING)
 
                     add_log(f"Ciclo {loop} concluído: {cycle_reactions} reações, {cycle_comments} comentários.", "success")
                     browser.close()
@@ -263,7 +284,7 @@ async def start_agent(background_tasks: BackgroundTasks, data: dict = {}):
         return JSONResponse({"error": "Gemini API Key não configurada."}, status_code=400)
 
     state["total_loops"] = int(data.get("loops", 3))
-    state["interval_minutes"] = int(data.get("interval", 30))
+    state["interval_minutes"] = int(data.get("interval", 120))
     state["running"] = True
     state["started_at"] = datetime.now().strftime("%H:%M:%S")
     state["logs"] = []
@@ -293,12 +314,15 @@ async def set_credentials(data: dict):
         credentials["password"] = data["password"]
     if data.get("llm_key"):
         credentials["llm_key"] = data["llm_key"]
+    if data.get("li_at"):
+        credentials["li_at"] = data["li_at"]
 
     # Confirmar sem revelar os valores
     configured = {
         "email": bool(credentials["email"]),
         "password": bool(credentials["password"]),
         "llm_key": bool(credentials["llm_key"]),
+        "li_at": bool(credentials["li_at"]),
     }
     return {"status": "ok", "configured": configured}
 

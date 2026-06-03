@@ -145,9 +145,9 @@
         <select id="interval">
           <option value="1">1 minuto (teste)</option>
           <option value="15">15 minutos</option>
-          <option value="30" selected>30 minutos</option>
+          <option value="30">30 minutos</option>
           <option value="60">1 hora</option>
-          <option value="120">2 horas</option>
+          <option value="120" selected>2 horas</option>
         </select>
       </div>
       <button class="btn btn-primary" id="btnStart" onclick="startAgent()">▶ Iniciar Agente</button>
@@ -170,6 +170,10 @@
       <div class="form-group">
         <label>Gemini API Key <span id="llmStatus" style="color:#22c55e;font-size:0.75rem;"></span></label>
         <input type="password" id="llmKey" placeholder="AIza..." />
+      </div>
+      <div class="form-group">
+        <label>Cookie li_at (Opcional se usar email/senha) <span id="liAtStatus" style="color:#22c55e;font-size:0.75rem;"></span></label>
+        <input type="password" id="liAt" placeholder="AQED..." />
       </div>
       <button class="btn btn-secondary" onclick="saveConfig()">� Enviar para Memória</button>
       <button class="btn" style="background:#7f1d1d;color:#fca5a5;margin-top:8px;" onclick="clearCredentials()">🗑️ Apagar da Memória</button>
@@ -255,13 +259,31 @@
       email: document.getElementById('email').value,
       password: document.getElementById('password').value,
       llm_key: document.getElementById('llmKey').value,
+      li_at: document.getElementById('liAt').value,
     };
-    await fetch('/save-config', {
+    const res = await fetch('/set-credentials', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(body)
     });
-    showToast('Credenciais salvas!');
+    if (res.ok) {
+      showToast('Credenciais salvas na memória!');
+      loadConfig();
+    } else {
+      showToast('Erro ao salvar', true);
+    }
+  }
+
+  async function clearCredentials() {
+    const res = await fetch('/clear-credentials', { method: 'POST' });
+    if (res.ok) {
+      document.getElementById('email').value = '';
+      document.getElementById('password').value = '';
+      document.getElementById('llmKey').value = '';
+      document.getElementById('liAt').value = '';
+      showToast('Credenciais apagadas da memória!');
+      loadConfig();
+    }
   }
 
   function startPolling() {
@@ -319,11 +341,20 @@
     logBox.scrollTop = logBox.scrollHeight;
   }
 
-  // Carregar config inicial
+  // Carregar config inicial (agora apenas verifica status)
   async function loadConfig() {
-    const res = await fetch('/config');
-    const data = await res.json();
-    if (data.email) document.getElementById('email').value = data.email;
+    try {
+      const res = await fetch('/credentials-status');
+      if (res.ok) {
+        const data = await res.json();
+        document.getElementById('emailStatus').textContent = data.email ? '(Na memória)' : '';
+        document.getElementById('passwordStatus').textContent = data.password ? '(Na memória)' : '';
+        document.getElementById('llmStatus').textContent = data.llm_key ? '(Na memória)' : '';
+        document.getElementById('liAtStatus').textContent = data.li_at ? '(Na memória)' : '';
+      }
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   loadConfig();

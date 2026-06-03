@@ -1,6 +1,10 @@
 import os
 import sys
 import time
+import random
+from random_timer import RandomTimer, ActionType
+
+timer = RandomTimer()
 
 sys.stdout.reconfigure(encoding='utf-8')
 from google import genai
@@ -21,16 +25,23 @@ client = genai.Client(api_key=LLM_API_KEY)
 MODEL = "gemini-3.1-flash-lite-preview"
 
 
-def gerar_comentario(texto_post: str) -> str | None:
-    """Usa o Gemini para gerar um comentário relevante para o post."""
+def gerar_comentario(texto_post: str, idioma: str = "en-US") -> str | None:
+    """Usa o Gemini para gerar um comentário relevante para o post no idioma especificado."""
+    if idioma == "pt-BR":
+        lang_instruction = "write an authentic comment in Portuguese (Brazilian Portuguese) following your instructions."
+        lang_reply = "Reply only with the comment in Portuguese or with IGNORE."
+    else:
+        lang_instruction = "write an authentic comment in English (US English) following your instructions."
+        lang_reply = "Reply only with the comment in English or with IGNORE."
+
     prompt = f"""Analyze the post below and decide if it's worth commenting on.
-If yes, write an authentic comment in ENGLISH following your instructions.
+If yes, {lang_instruction}
 If not worth commenting, reply exactly: IGNORE
 
 Post:
 {texto_post[:1000]}
 
-Reply only with the comment in English or with IGNORE."""
+{lang_reply}"""
 
     try:
         response = client.models.generate_content(
@@ -112,7 +123,7 @@ def extrair_posts(page) -> list[dict]:
     posts = []
 
     print("  Aguardando feed carregar no Shadow DOM...")
-    time.sleep(5)
+    timer.sleep_random(ActionType.MEDIUM_WAIT)
 
     dados = page.evaluate(JS_EXTRACT)
 
@@ -268,7 +279,7 @@ def comentar_post(page, post_index: int, autor: str, comentario: str):
             print(f"  ⚠️  Botão de comentário não encontrado para: {autor[:40]}")
             return
             
-        time.sleep(3)
+        timer.sleep_random(ActionType.MEDIUM_WAIT)
 
         # Encontrar campo de texto e focar
         fill_result = page.evaluate("""
@@ -292,10 +303,12 @@ def comentar_post(page, post_index: int, autor: str, comentario: str):
         """)
 
         if fill_result and fill_result.get("success"):
-            time.sleep(1)
-            # Digitar simulando teclado tecla a tecla (fundamental para o LinkedIn habilitar o botão)
-            page.keyboard.type(comentario, delay=20)
-            time.sleep(2)
+            timer.sleep_random(ActionType.SHORT_WAIT)
+            # Digitar simulando teclado tecla a tecla com atraso aleatório por caractere
+            for char in comentario:
+                page.keyboard.type(char)
+                timer.sleep_random(ActionType.TYPING_CHAR)
+            timer.sleep_random(ActionType.COMMENT_SUBMISSION)
             
             # Clicar no botão de enviar (Post/Publicar) usando JS
             submit_result = page.evaluate("""
@@ -339,14 +352,14 @@ def comentar_post(page, post_index: int, autor: str, comentario: str):
             }
             """)
             
-            time.sleep(2)
+            timer.sleep_random(ActionType.MEDIUM_WAIT)
             if submit_result and submit_result.get("success"):
                 print(f"  💬 Comentado em: {autor[:40]}")
                 print(f"     → {comentario[:100]}")
             else:
                 # Fallback tentar control enter se não achou o botão
                 page.keyboard.press("Control+Enter")
-                time.sleep(2)
+                timer.sleep_random(ActionType.MEDIUM_WAIT)
                 print(f"  💬 Comentado em: {autor[:40]} (via Control+Enter)")
                 print(f"     → {comentario[:100]}")
         else:
@@ -357,7 +370,7 @@ def comentar_post(page, post_index: int, autor: str, comentario: str):
 
 
 TOTAL_LOOPS = 3
-INTERVALO_MINUTOS = 30
+INTERVALO_MINUTOS = 120
 
 
 def main():
@@ -437,7 +450,7 @@ def executar_ciclo():
         print("[2/4] Acessando feed do LinkedIn...")
         page.goto("https://www.linkedin.com/feed/")
         page.wait_for_load_state("domcontentloaded")
-        time.sleep(10)
+        timer.sleep_random(ActionType.FEED_LOADING)
 
         # Verificar se está logado
         if "login" in page.url or "authwall" in page.url:
@@ -448,7 +461,7 @@ def executar_ciclo():
         print("[3/4] Carregando posts...")
         for _ in range(3):
             page.keyboard.press("PageDown")
-            time.sleep(2)
+            timer.sleep_random(ActionType.SCROLL_DELAY)
 
         # Screenshot do feed para confirmar o que está sendo visto
         try:
@@ -468,10 +481,18 @@ def executar_ciclo():
         print("\n[4/4] Processando posts com Gemini...")
         curtidos = 0
         comentados = 0
+        
+        # Decide aleatoriamente qual idioma é a maioria no ciclo (2/3 de probabilidade)
+        majority_lang = random.choice(["pt-BR", "en-US"])
+        minority_lang = "en-US" if majority_lang == "pt-BR" else "pt-BR"
+        print(f"  → Configuração de idiomas: Maioria {majority_lang} (66%), Minoria {minority_lang} (33%)")
 
         for idx, post in enumerate(posts):
             print(f"\n--- Analisando post de: {post['autor'][:50]} ---")
-            comentario = gerar_comentario(post["texto"])
+            # Sorteio com 2/3 vs 1/3 de probabilidade
+            idioma_atual = majority_lang if random.random() < 2.0 / 3.0 else minority_lang
+            print(f"  → Idioma solicitado para análise: {idioma_atual}")
+            comentario = gerar_comentario(post["texto"], idioma=idioma_atual)
 
             # Sempre reage
             curtir_post(page, idx, post["autor"])
@@ -485,6 +506,7 @@ def executar_ciclo():
 
             # Comenta se o Gemini decidiu que vale
             if comentario:
+                timer.sleep_random(ActionType.REACTION_TO_COMMENT)
                 comentar_post(page, idx, post["autor"], comentario)
                 try:
                     page.screenshot(path=f"screenshot_comment_{idx}.png", full_page=False, timeout=10000)
@@ -494,7 +516,7 @@ def executar_ciclo():
             else:
                 print("  ⏭️  Gemini decidiu ignorar este post")
 
-            time.sleep(2)
+            timer.sleep_random(ActionType.POST_PROCESSING)
 
         print(f"\n  Ciclo concluído: {curtidos} reações | {comentados} comentários")
         browser.close()
